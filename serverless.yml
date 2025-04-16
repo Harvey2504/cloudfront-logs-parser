@@ -12,26 +12,23 @@ provider:
     PYTHONPATH: ./src
     MY_AWS_ACCESS_KEY: ${env:MY_AWS_ACCESS_KEY}
     MY_AWS_SECRET_KEY: ${env:MY_AWS_SECRET_KEY}
-    OPENSEARCH_HOST: ${env:OPENSEARCH_HOST}
-    OPENSEARCH_USERNAME: ${env:OPENSEARCH_USERNAME}
-    OPENSEARCH_PASSWORD: ${env:OPENSEARCH_PASSWORD}
-  region: ap-south-1
+  region: us-east-1
 
 package:
   patterns:
     # exclude everything
     - "!./**"
     # include only what's needed
-    - src/cloudfront_parser.py
+    - src/helpers/**
     - src/lambda_handler.py
-    - src/version.py
+    - src/providers/**
 
 functions:
   cloudfrontLogs:
     handler: src/lambda_handler.handler
     events:
       - s3:
-          bucket: parveztest
+          bucket: atib-bucket
           event: s3:ObjectCreated:*
           rules:
             - prefix: logs/
