@@ -1,4 +1,5 @@
-boto3
-opensearch-py
-user-agents
-pytest
+azure-identity
+azure-mgmt-compute
+azure-mgmt-sql
+azure-mgmt-storage
+azure-mgmt-resource

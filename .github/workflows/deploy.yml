@@ -21,10 +21,9 @@ jobs:
         with:
           python-version: 3.11
 
-      - name: Run python unit tests
+      - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pytest
 
       - name: Set up AWS configuration
         uses: aws-actions/configure-aws-credentials@v4
@@ -40,9 +39,6 @@ jobs:
         run: |
           export MY_AWS_ACCESS_KEY=${{ secrets.MY_AWS_ACCESS_KEY }}
           export MY_AWS_SECRET_KEY=${{ secrets.MY_AWS_SECRET_KEY }}
-          export OPENSEARCH_HOST=${{ secrets.OPENSEARCH_HOST }}
-          export OPENSEARCH_USERNAME=${{ secrets.OPENSEARCH_USERNAME }}
-          export OPENSEARCH_PASSWORD=${{ secrets.OPENSEARCH_PASSWORD }}
 
           npx serverless deploy --stage dev --verbose
           npx serverless info --stage dev

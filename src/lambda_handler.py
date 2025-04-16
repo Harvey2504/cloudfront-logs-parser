@@ -1,66 +1,68 @@
 import json
-import boto3
-import os
-import urllib.parse
-import gzip
-from opensearchpy import OpenSearch
-from src.cloudfront_parser import parse_cloudfront_logs
+from helper.ssm_helper import get_account_details
+from providers.azure.azure_provider import create_azure_resources
 
 def lambda_handler(event, context):
+    """Lambda function handler."""
     try:
-        # AWS credentials from env variables
-        aws_access_key = os.environ['MY_AWS_ACCESS_KEY']
-        aws_secret_key = os.environ['MY_AWS_SECRET_KEY']
+        body = json.loads(event.get('body', '{}'))
+        tenant_id = body.get('tenant_id')
+        account_id = body.get('account_id')
 
-        # OpenSearch credentials from env variables
-        opensearch_host = os.environ['OPENSEARCH_HOST']
-        opensearch_username = os.environ['OPENSEARCH_USERNAME']
-        opensearch_password = os.environ['OPENSEARCH_PASSWORD']
+        if not tenant_id or not account_id:
+            return {
+                'statusCode': 400,
+                'body': json.dumps('Missing tenant_id or account_id.')
+            }
 
+        account_details = get_account_details(tenant_id, account_id)
 
-        # Get the S3 bucket and key from the S3 event
-        bucket = event['Records'][0]['s3']['bucket']['name']
-        key = urllib.parse.unquote_plus(event['Records'][0]['s3']['object']['key'], encoding='utf-8')
+        cloud_provider = account_details.get('cloudprovider')
+        region = account_details.get('region')
 
-        # Initialize S3 client
-        s3_client = boto3.client('s3', aws_access_key_id=aws_access_key, aws_secret_access_key=aws_secret_key)
+        # Extract the 'write' block for credentials
+        write_data = account_details.get('write', {})
 
-        opensearch = OpenSearch(
-            hosts=[{'host': opensearch_host, 'port': 443}],
-            http_auth=(opensearch_username, opensearch_password),
-            scheme="https",
-            timeout=30, 
-            max_retries=3, 
-            retry_on_timeout=True
-        )
-
-        try:
-            object = s3_client.get_object(Bucket=bucket, Key=key)["Body"]
-            batch_size = 2000
-            with gzip.open(object) as log_file:
-                log_data = parse_cloudfront_logs(log_file)
-                
-                # Loop through the array in batches of 2000
-                for i in range(0, len(log_data), batch_size):
-                    batch = log_data[i:i + batch_size]
-                    opensearch.bulk(body=batch)
-                       
-
-        except Exception as e:
-         return {
-            'statusCode': 500,
-            'body': json.dumps(f'Error: {e}')
-        }
-
+        if cloud_provider == 'aws':
+            aws_credentials = {
+                'access_key': write_data.get('access_id'),
+                'secret_key': write_data.get('access_secret')
+            }
+            result = create_aws_resources(aws_credentials, region)
+        elif cloud_provider == 'azure':
+            azure_credentials = {
+                'tenant_id': write_data.get('az_tenant_id'),
+                'client_id': write_data.get('client_id'),
+                'client_secret': write_data.get('client_secret'),
+                'subscription_id': write_data.get('subscription_id')
+            }
+            result = create_azure_resources(azure_credentials, region)
+        else:
+            return {
+                'statusCode': 400,
+                'body': json.dumps(f"Unsupported cloud provider: {cloud_provider}")
+            }
 
         return {
             'statusCode': 200,
-            'body': json.dumps(f'CloudFront logs for ingested into OpenSearch successfully!')
+            'body': json.dumps({
+                'message': 'Infrastructure creation initiated successfully.',
+                'result': result
+            })
         }
 
+    except json.JSONDecodeError:
+        return {
+            'statusCode': 400,
+            'body': json.dumps('Invalid JSON in request body.')
+        }
+    except ValueError as e:
+        return {
+            'statusCode': 404,
+            'body': json.dumps(str(e))
+        }
     except Exception as e:
-        print(f"Unexpected error: {e}")
         return {
             'statusCode': 500,
-            'body': json.dumps(f'Error: {e}')
+            'body': json.dumps(f"Internal server error: {str(e)}")
         }
